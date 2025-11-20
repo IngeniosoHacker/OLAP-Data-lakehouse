@@ -1,0 +1,224 @@
+# Dependencies and packages
+go.mod
+go.sum
+vendor/
+node_modules/
+package-lock.json
+yarn.lock
+
+# Compiled binaries and executables
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+*.jar
+*.war
+*.class
+etl-go/etl-go  # The built binary from the main directory
+
+# Build and distribution directories
+bin/
+build/
+dist/
+target/
+out/
+_Desktop/
+*.dmg
+*.pkg
+*.deb
+*.rpm
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vs/
+.settings/
+.project
+
+# Operating system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Environment specific
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+*.env
+.envrc
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Temporary folders
+tmp/
+temp/
+tmp/
+tmp/**/*
+temp/**/*
+
+# Docker and container related
+*.dockerignore
+.docker/
+.dockerignore
+!dockerfiles/**
+
+# Kubernetes related (but keep manifests)
+*.kubeconfig
+.kube/
+.kubectl/
+.k3s/
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Backup files
+*~
+*.bak
+*.swp
+*.tmp
+*.temp
+
+# Secrets and config files that shouldn't be committed
+config.json
+secrets.json
+credentials.json
+auth.json
+**/secret/**
+**/credentials/**
+
+# Local configuration files
+*.local
+local.properties
+local.yml
+local.yaml
+local.json
+config.local
+
+# OS generated files
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+VolumeIcon.icns
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.local/share/virtualenvs/
+
+# Data files (these should be stored in MinIO, not git)
+*.csv
+*.json
+*.xlsx
+*.xls
+*.parquet
+*.hdf5
+*.pkl
+*.pickle
+*.npz
+*.npy
+*.db
+*.sqlite
+*.dump
+*.sql
+*.backup
+*.sql.gz
+
+# Large files that shouldn't be in git
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+*.dmg
+*.iso
+*.img
+
+# Test and development specific
+test/
+tests/
+spec/
+**/test/
+**/tests/
+**/spec/
+
+# Documentation builds
+docs/_build/
+*.rst~
+
+# Ignore generated Kubernetes files if they contain secrets
+**/k8s-manifests/**/secret*.yaml
+**/k8s-manifests/**/*secret*.yml
+
+# But keep the main manifests (they should be sanitized of secrets)
+!k8s-manifests/
+
+# Docker build artifacts
+**/Dockerfile.build
+**/docker-image-*.tar
+
+# Local web development
+*.tmp.js
+*.tmp.css
+
+# Ignore specific sensitive files in the project
+email-config.yaml  # This contains sensitive SMTP credentials
+**/config.yaml
+**/config.yml
+
+# Ignore sample data (keep the file that's already in the repo but ignore changes)
+sample_data.csv
+
+# Temporary files from editors
+*.tmp
+*.temp
