@@ -1,6 +1,9 @@
 # Use the official Golang image to create the binary
 FROM golang:1.21-alpine AS builder
 
+# Install git and other needed tools
+RUN apk add --no-cache git
+
 # Set the working directory
 WORKDIR /app
 
