@@ -143,7 +143,6 @@ B --> D[Transformación]
 D --> E[PostgreSQL - Modelo Estrella]
 E --> F[Vistas / Datamarts]
 F --> G[Clientes: Power BI / Tableau]
-
 E --> H[Pod R - CronJob]
 H --> I[Generación PDF]
 I --> J[SMTP Externo - Envío de Correo]
@@ -170,4 +169,5 @@ Reportes Semanales → Pod R → SMTP Externo
 
 ---
 
+Remeber that the pipeline should be capable to get data from sql and from files, cause is a data-lakehouse, lets create the solution
 

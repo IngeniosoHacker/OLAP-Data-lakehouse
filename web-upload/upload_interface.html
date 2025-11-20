@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Lakehouse - File Upload</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .upload-area {
+            border: 3px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background-color: #fafafa;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #4CAF50;
+            background-color: #e8f5e9;
+        }
+
+        .upload-area h3 {
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .upload-area p {
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .browse-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .browse-btn:hover {
+            background-color: #45a049;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-list {
+            margin-top: 20px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .file-icon {
+            margin-right: 10px;
+            font-size: 20px;
+        }
+
+        .file-name {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .file-size {
+            color: #666;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        .file-status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .status-uploading {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .upload-btn {
+            background-color: #2196F3;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background-color 0.3s;
+            margin-top: 10px;
+        }
+
+        .upload-btn:hover:not(:disabled) {
+            background-color: #1976D2;
+        }
+
+        .upload-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .config-section {
+            background-color: #f0f8ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .config-item {
+            margin-bottom: 10px;
+        }
+
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .config-item input, .config-item select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .status-message {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+
+        .status-success-message {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .file-types {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Data Lakehouse File Upload</h1>
+        <p class="subtitle">Drag and drop your data files to start the ELT process</p>
+        
+        <div class="config-section">
+            <h3>MinIO Configuration</h3>
+            <div class="config-item">
+                <label for="minioEndpoint">MinIO Endpoint:</label>
+                <input type="text" id="minioEndpoint" placeholder="e.g., http://localhost:9000" value="http://localhost:9000">
+            </div>
+            <div class="config-item">
+                <label for="minioAccessKey">Access Key:</label>
+                <input type="text" id="minioAccessKey" placeholder="MinIO access key" value="minioadmin">
+            </div>
+            <div class="config-item">
+                <label for="minioSecretKey">Secret Key:</label>
+                <input type="password" id="minioSecretKey" placeholder="MinIO secret key" value="minioadmin">
+            </div>
+            <div class="config-item">
+                <label for="bucketName">Bucket Name:</label>
+                <input type="text" id="bucketName" placeholder="e.g., raw" value="raw">
+            </div>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <div>
+                <h3>Drag & Drop Files Here</h3>
+                <p>Supports CSV, JSON, XLSX, XLS, SQL dumps, and more</p>
+                <p class="file-types">Supported formats: .csv, .json, .xlsx, .xls, .sql, .dump, .txt, .xml, .parquet</p>
+                <button class="browse-btn" id="browseBtn">Browse Files</button>
+                <input type="file" id="fileInput" class="file-input" multiple>
+            </div>
+        </div>
+
+        <div class="file-list" id="fileList">
+            <!-- Files will be listed here -->
+        </div>
+
+        <button class="upload-btn" id="uploadBtn" disabled>Upload Files to Data Lakehouse</button>
+        
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const browseBtn = document.getElementById('browseBtn');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const fileList = document.getElementById('fileList');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const statusMessage = document.getElementById('statusMessage');
+            
+            let selectedFiles = [];
+
+            // Event listeners
+            browseBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', handleFileSelect);
+
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                handleDroppedFiles(e.dataTransfer.files);
+            });
+
+            uploadBtn.addEventListener('click', uploadFiles);
+
+            function handleFileSelect(e) {
+                handleDroppedFiles(e.target.files);
+            }
+
+            function handleDroppedFiles(files) {
+                // Convert FileList to Array
+                const filesArray = Array.from(files);
+                
+                // Add new files to the selectedFiles array
+                selectedFiles = [...selectedFiles, ...filesArray];
+                
+                // Remove duplicate files (based on name and size)
+                selectedFiles = selectedFiles.filter((file, index, self) =>
+                    index === self.findIndex(f => f.name === file.name && f.size === file.size)
+                );
+                
+                // Update the file list display
+                updateFileList();
+            }
+
+            function updateFileList() {
+                fileList.innerHTML = '';
+                
+                if (selectedFiles.length === 0) {
+                    uploadBtn.disabled = true;
+                    return;
+                }
+                
+                uploadBtn.disabled = false;
+                
+                selectedFiles.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    
+                    // Determine file icon based on extension
+                    let icon = '📄'; // default
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    if (['csv'].includes(ext)) icon = '📊';
+                    else if (['json'].includes(ext)) icon = ' {}

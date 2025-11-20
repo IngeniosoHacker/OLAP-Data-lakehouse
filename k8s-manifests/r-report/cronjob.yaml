@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: r-report-cronjob
+  namespace: reports
+spec:
+  schedule: "0 9 * * 1"  # Run at 9 AM every Monday (weekly)
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: r-report
+            image: r-report:latest
+            env:
+            - name: DB_HOST
+              value: "postgres-service.postgres"
+            - name: DB_NAME
+              value: "datalakehouse"
+            - name: DB_USER
+              value: "admin"
+            - name: DB_PASSWORD
+              value: "password123"
+            - name: SMTP_SERVER
+              value: "smtp.gmail.com"
+            - name: SMTP_PORT
+              value: "587"
+            - name: SENDER_EMAIL
+              value: "your-email@gmail.com"
+            - name: SENDER_PASSWORD
+              value: "your-app-password"
+            - name: RECIPIENT_EMAIL
+              value: "recipient@example.com"
+            command:
+            - Rscript
+            - report_generation.R
+          restartPolicy: OnFailure

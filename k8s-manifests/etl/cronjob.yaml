@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etl-cronjob
+  namespace: etl
+spec:
+  schedule: "0 * * * *"  # Run every hour
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: etl-go
+            image: etl-go:latest
+            env:
+            - name: MINIO_ENDPOINT
+              value: "minio-service.minio:9000"
+            - name: MINIO_ACCESS_KEY
+              value: "minioadmin"
+            - name: MINIO_SECRET_KEY
+              value: "minioadmin123"
+            - name: DB_NAME
+              value: "datalakehouse"
+            - name: DB_USER
+              value: "admin"
+            - name: DB_PASSWORD
+              value: "password123"
+            - name: DB_HOST
+              value: "postgres-service.postgres:5432"
+            - name: ETL_SOURCE_TYPE
+              value: "file"  # Can be "file" or "sql"
+            - name: ETL_SOURCE_FILE
+              value: "/data/sample.csv"  # Example file path
+            command:
+            - /etl-go
+          restartPolicy: OnFailure

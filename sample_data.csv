@@ -1,0 +1,4 @@
+customer_id,customer_name,product_id,product_name,quantity,unit_price,total_amount
+1,John Doe,101,Laptop,2,1000.00,2000.00
+2,Jane Smith,102,Mouse,5,25.00,125.00
+3,Bob Johnson,103,Keyboard,3,75.00,225.00

@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    build:
+      context: ../dockerfiles/postgres
+    container_name: datalakehouse-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=datalakehouse
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - datalakehouse-network
+    restart: unless-stopped
+
+  # Optional: MinIO for data lake functionality
+  minio:
+    image: minio/minio:latest
+    container_name: datalakehouse-minio
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - datalakehouse-network
+    restart: unless-stopped
+
+networks:
+  datalakehouse-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:

@@ -1,0 +1,85 @@
+# Email Configuration for Data Lakehouse Reports
+# This file contains the list of recipients and their information
+
+recipients:
+  - name: "John Doe"
+    email: "john.doe@example.com"
+    department: "Sales"
+    report_types: ["weekly", "monthly"]
+  
+  - name: "Jane Smith" 
+    email: "jane.smith@example.com"
+    department: "Marketing"
+    report_types: ["weekly"]
+  
+  - name: "Bob Johnson"
+    email: "bob.johnson@example.com"
+    department: "Finance"
+    report_types: ["weekly", "monthly", "quarterly"]
+
+  - name: "Alice Williams"
+    email: "alice.williams@example.com"
+    department: "Operations"
+    report_types: ["daily", "weekly"]
+
+# SMTP Configuration
+smtp:
+  host: "smtp.gmail.com"
+  port: 587
+  username: "your-email@gmail.com"
+  password: "your-app-password"
+  from: "Data Lakehouse Reports <reports@datalakehouse.com>"
+  encryption: "starttls"  # Options: none, ssl, starttls
+
+# Report Settings
+reports:
+  weekly:
+    enabled: true
+    schedule: "0 9 * * 1"  # Every Monday at 9 AM
+    subject: "Weekly Data Report - {{date}}"
+    template: |
+      Dear {{name}},
+      
+      Here is your weekly data report for the period ending {{date}}.
+      
+      Please find the attached report with key metrics and insights.
+      
+      Best regards,
+      Data Lakehouse Team
+      
+  monthly:
+    enabled: true
+    schedule: "0 10 1 * *"  # First day of every month at 10 AM
+    subject: "Monthly Data Report - {{month}}"
+    template: |
+      Dear {{name}},
+      
+      Here is your monthly data report for {{month}}.
+      
+      Please find the attached report with comprehensive metrics and analytics.
+      
+      Best regards,
+      Data Lakehouse Team
+      
+  daily:
+    enabled: false
+    schedule: "0 8 * * *"  # Every day at 8 AM
+    subject: "Daily Summary Report - {{date}}"
+    template: |
+      Dear {{name}},
+      
+      Here is your daily summary report for {{date}}.
+      
+      Please find the attached report with today's key metrics.
+      
+      Best regards,
+      Data Lakehouse Team
+
+# Additional Settings
+settings:
+  timezone: "UTC"
+  retry_attempts: 3
+  timeout_seconds: 30
+  enable_logging: true
+  attachments:
+    - "weekly_data_report.pdf"
