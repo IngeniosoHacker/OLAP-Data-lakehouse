@@ -35,6 +35,26 @@ services:
       - datalakehouse-network
     restart: unless-stopped
 
+  # Optional: ETL Service for data processing
+  etl-go:
+    build:
+      context: ./etl-go
+    container_name: datalakehouse-etl-go
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - DB_NAME=datalakehouse
+      - DB_USER=admin
+      - DB_PASSWORD=password123
+      - DB_HOST=postgres
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - datalakehouse-network
+    restart: unless-stopped
+
 networks:
   datalakehouse-network:
     driver: bridge

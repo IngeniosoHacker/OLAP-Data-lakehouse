@@ -359,4 +359,155 @@
                     let icon = '📄'; // default
                     const ext = file.name.split('.').pop().toLowerCase();
                     if (['csv'].includes(ext)) icon = '📊';
-                    else if (['json'].includes(ext)) icon = ' {}
+                    else if (['json'].includes(ext)) icon = ' {}';
+                    else if (['xlsx', 'xls'].includes(ext)) icon = '📈';
+                    else if (['txt'].includes(ext)) icon = '📝';
+                    else if (['sql', 'dump'].includes(ext)) icon = '🗄️';
+                    
+                    fileItem.innerHTML = `
+                        <div class="file-info">
+                            <span class="file-icon">${icon}</span>
+                            <div>
+                                <div class="file-name">${file.name}</div>
+                                <div class="file-size">${formatFileSize(file.size)}</div>
+                            </div>
+                        </div>
+                        <div class="file-status status-pending">Pending</div>
+                    `;
+                    
+                    // Add remove button
+                    const removeBtn = document.createElement('button');
+                    removeBtn.innerHTML = '❌';
+                    removeBtn.style.marginLeft = '10px';
+                    removeBtn.style.background = 'none';
+                    removeBtn.style.border = 'none';
+                    removeBtn.style.cursor = 'pointer';
+                    removeBtn.onclick = () => {
+                        selectedFiles.splice(index, 1);
+                        updateFileList();
+                    };
+                    fileItem.appendChild(removeBtn);
+                    
+                    fileList.appendChild(fileItem);
+                });
+            }
+            
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            function uploadFiles() {
+                if (selectedFiles.length === 0) {
+                    showStatusMessage('No files selected for upload', 'error');
+                    return;
+                }
+
+                // Get configuration values
+                const minioEndpoint = document.getElementById('minioEndpoint').value;
+                const minioAccessKey = document.getElementById('minioAccessKey').value;
+                const minioSecretKey = document.getElementById('minioSecretKey').value;
+                const bucketName = document.getElementById('bucketName').value;
+
+                // Disable upload button during upload
+                uploadBtn.disabled = true;
+                
+                // Show progress bar
+                progressBar.style.display = 'block';
+                
+                // Update all file statuses to uploading
+                document.querySelectorAll('.file-status').forEach((statusEl, index) => {
+                    statusEl.className = 'file-status status-uploading';
+                    statusEl.textContent = 'Uploading...';
+                });
+
+                // Create FormData object
+                const formData = new FormData();
+                selectedFiles.forEach((file, index) => {
+                    formData.append('files', file);
+                });
+                
+                // Add configuration to form data
+                formData.append('minioEndpoint', minioEndpoint);
+                formData.append('minioAccessKey', minioAccessKey);
+                formData.append('minioSecretKey', minioSecretKey);
+                formData.append('bucketName', bucketName);
+
+                // Send files via fetch API
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update all file statuses to success
+                        document.querySelectorAll('.file-status').forEach((statusEl) => {
+                            statusEl.className = 'file-status status-success';
+                            statusEl.textContent = 'Uploaded';
+                        });
+                        
+                        showStatusMessage(`Successfully uploaded ${selectedFiles.length} file(s) to Data Lakehouse!`, 'success');
+                        
+                        // Reset selected files
+                        selectedFiles = [];
+                        updateFileList();
+                        
+                        // Hide progress bar after delay
+                        setTimeout(() => {
+                            progressBar.style.display = 'none';
+                            progressFill.style.width = '0%';
+                        }, 2000);
+                    } else {
+                        throw new Error(data.error || 'Upload failed');
+                    }
+                })
+                .catch(error => {
+                    console.error('Upload error:', error);
+                    showStatusMessage(`Upload failed: ${error.message}`, 'error');
+                    
+                    // Update all file statuses to error
+                    document.querySelectorAll('.file-status').forEach((statusEl) => {
+                        statusEl.className = 'file-status status-error';
+                        statusEl.textContent = 'Error';
+                    });
+                    
+                    // Re-enable upload button
+                    uploadBtn.disabled = false;
+                    
+                    // Hide progress bar after delay
+                    setTimeout(() => {
+                        progressBar.style.display = 'none';
+                        progressFill.style.width = '0%';
+                    }, 2000);
+                });
+
+                // Simulate progress (in a real implementation, you would update based on actual progress)
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += 10;
+                    progressFill.style.width = progress + '%';
+                    if (progress >= 100) {
+                        clearInterval(interval);
+                    }
+                }, 200);
+            }
+
+            function showStatusMessage(message, type) {
+                statusMessage.textContent = message;
+                statusMessage.className = `status-message status-${type}-message`;
+                statusMessage.style.display = 'block';
+                
+                // Auto hide after 5 seconds
+                setTimeout(() => {
+                    statusMessage.style.display = 'none';
+                }, 5000);
+            }
+
+        });
+    </script>
+</body>
+</html>
