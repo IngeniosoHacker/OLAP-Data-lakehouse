@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   postgres:
     build:
-      context: ../dockerfiles/postgres
+      context: ./dockerfiles/postgres
     container_name: datalakehouse-postgres
     ports:
       - "5432:5432"
@@ -13,7 +11,7 @@ services:
       - POSTGRES_PASSWORD=password123
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./dockerfiles/postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     networks:
       - datalakehouse-network
     restart: unless-stopped
@@ -55,6 +53,23 @@ services:
       - datalakehouse-network
     restart: unless-stopped
 
+  grafana:
+    image: grafana/grafana:10.4.5
+    container_name: datalakehouse-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - postgres
+    networks:
+      - datalakehouse-network
+    restart: unless-stopped
+
 networks:
   datalakehouse-network:
     driver: bridge
@@ -62,3 +77,4 @@ networks:
 volumes:
   postgres_data:
   minio_data:
+  grafana_data:

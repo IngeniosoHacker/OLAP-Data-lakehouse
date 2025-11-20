@@ -1,10 +1,8 @@
 package main
 
 import (
-	"archive/tar"
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/csv"
@@ -15,12 +13,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
-	"github.com/extrame/gofile"
-	"github.com/lib/pq"
+	"github.com/extrame/xls"
+	_ "github.com/lib/pq"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/tealeg/xlsx"
@@ -164,7 +163,7 @@ func (ec *EmailConfig) FormatEmailBody(reportType string, recipient Recipient) (
 
 // ValidateEmail validates email format
 func ValidateEmail(email string) bool {
-	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})
+	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	return re.MatchString(email)
 }
 
@@ -262,6 +261,35 @@ type ETLService struct {
 	minioClient  *minio.Client
 	db           *sql.DB
 	minioBucket  string
+}
+
+// OrderRow holds a normalized order record from CSV for star-schema load
+type OrderRow struct {
+	DateValue        time.Time
+	CustomerName     string
+	CustomerEmail    string
+	CustomerPhone    string
+	CustomerAddress  string
+	CustomerCity     string
+	CustomerState    string
+	CustomerCountry  string
+	ProductName      string
+	ProductCategory  string
+	ProductDesc      string
+	ProductPrice     float64
+	ProductCost      float64
+	ProductMaker     string
+	LocationName     string
+	LocationAddress  string
+	LocationCity     string
+	LocationState    string
+	LocationCountry  string
+	LocationZip      string
+	Quantity         int
+	UnitPrice        float64
+	DiscountAmount   float64
+	TaxAmount        float64
+	CreatedTimestamp time.Time
 }
 
 // FileFormat represents the type of file being processed
@@ -496,8 +524,7 @@ func (e *ETLService) ExtractFromXLSX(filePath string) ([]DataRecord, error) {
 	// Get headers from first row
 	var headers []string
 	for _, cell := range sheet.Rows[0].Cells {
-		header, _ := cell.String()
-		headers = append(headers, header)
+		headers = append(headers, cell.String())
 	}
 
 	// Process data rows
@@ -508,9 +535,8 @@ func (e *ETLService) ExtractFromXLSX(filePath string) ([]DataRecord, error) {
 		
 		record := make(DataRecord)
 		for j, cell := range row.Cells {
-			cellValue, _ := cell.String()
 			if j < len(headers) {
-				record[headers[j]] = cellValue
+				record[headers[j]] = cell.String()
 			}
 		}
 		data = append(data, record)
@@ -521,43 +547,40 @@ func (e *ETLService) ExtractFromXLSX(filePath string) ([]DataRecord, error) {
 
 // ExtractFromXLS extracts data from XLS file
 func (e *ETLService) ExtractFromXLS(filePath string) ([]DataRecord, error) {
-	xlFile, err := gofile.OpenFile(filePath)
+	xlFile, err := xls.Open(filePath, "utf-8")
 	if err != nil {
 		return nil, err
 	}
-	defer xlFile.Close()
 
 	var data []DataRecord
 
 	// Get the first sheet
-	sheet, err := xlFile.GetSheet(0)
-	if err != nil {
-		return nil, err
+	sheet := xlFile.GetSheet(0)
+	if sheet == nil {
+		return nil, fmt.Errorf("no sheets found in XLS file")
 	}
 
 	// Get headers from first row
 	var headers []string
-	firstRow, err := sheet.GetRow(0)
-	if err != nil {
-		return nil, err
+	firstRow := sheet.Row(0)
+	if firstRow == nil {
+		return nil, fmt.Errorf("header row missing in XLS file")
 	}
-	
-	for j := 0; firstRow.GetCell(j) != nil; j++ {
-		header := firstRow.GetCell(j).Value
-		headers = append(headers, header)
+
+	for j := 0; j <= firstRow.LastCol(); j++ {
+		headers = append(headers, firstRow.Col(j))
 	}
 
 	// Process data rows
-	for i := 1; i < int(sheet.MaxRow); i++ {
-		row, err := sheet.GetRow(i)
-		if err != nil {
+	for i := 1; i <= int(sheet.MaxRow); i++ {
+		row := sheet.Row(i)
+		if row == nil {
 			continue
 		}
-		
+
 		record := make(DataRecord)
-		for j := 0; j < len(headers) && row.GetCell(j) != nil; j++ {
-			cellValue := row.GetCell(j).Value
-			record[headers[j]] = cellValue
+		for j := 0; j < len(headers); j++ {
+			record[headers[j]] = row.Col(j)
 		}
 		data = append(data, record)
 	}
@@ -608,6 +631,165 @@ func (e *ETLService) ExtractFromFile(filePath string) ([]DataRecord, error) {
 	default:
 		return nil, fmt.Errorf("unsupported file format: %s", filePath)
 	}
+}
+
+// parseOrdersCSV parses an orders CSV into typed OrderRow records.
+// Expected headers (lowercase, underscores recommended):
+// date, customer_name, customer_email, customer_phone, customer_address, customer_city, customer_state, customer_country,
+// product_name, product_category, product_description, product_price, product_cost, product_manufacturer,
+// location_name, location_address, location_city, location_state, location_country, location_zipcode,
+// quantity, unit_price, discount_amount (optional), tax_amount (optional), created_timestamp (optional)
+func parseOrdersCSV(filePath string) ([]OrderRow, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	if len(records) < 2 {
+		return nil, fmt.Errorf("no data rows found")
+	}
+
+	header := make([]string, len(records[0]))
+	for i, h := range records[0] {
+		header[i] = strings.TrimSpace(strings.ToLower(h))
+	}
+	idx := func(name string) int {
+		for i, h := range header {
+			if h == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	required := []string{
+		"date",
+		"customer_name", "customer_email", "customer_phone", "customer_address", "customer_city", "customer_state", "customer_country",
+		"product_name", "product_category", "product_description", "product_price", "product_cost", "product_manufacturer",
+		"location_name", "location_address", "location_city", "location_state", "location_country", "location_zipcode",
+		"quantity", "unit_price",
+	}
+	for _, r := range required {
+		if idx(r) == -1 {
+			return nil, fmt.Errorf("missing required column: %s", r)
+		}
+	}
+
+	get := func(row []string, name string) string {
+		pos := idx(name)
+		if pos >= 0 && pos < len(row) {
+			return strings.TrimSpace(row[pos])
+		}
+		return ""
+	}
+
+	parseDate := func(s string) (time.Time, error) {
+		layouts := []string{"2006-01-02", "02/01/2006", time.RFC3339}
+		for _, l := range layouts {
+			if t, err := time.Parse(l, s); err == nil {
+				return t, nil
+			}
+		}
+		return time.Time{}, fmt.Errorf("invalid date: %s", s)
+	}
+
+	parseInt := func(s string) (int, error) {
+		if s == "" {
+			return 0, nil
+		}
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, fmt.Errorf("invalid int '%s'", s)
+		}
+		return v, nil
+	}
+
+	parseFloat := func(s string) (float64, error) {
+		if s == "" {
+			return 0, nil
+		}
+		v, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid number '%s'", s)
+		}
+		return v, nil
+	}
+
+	var out []OrderRow
+	for i, row := range records[1:] {
+		line := i + 2 // account for header
+		dateVal, err := parseDate(get(row, "date"))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", line, err)
+		}
+		qty, err := parseInt(get(row, "quantity"))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", line, err)
+		}
+		uPrice, err := parseFloat(get(row, "unit_price"))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", line, err)
+		}
+		pPrice, err := parseFloat(get(row, "product_price"))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", line, err)
+		}
+		pCost, err := parseFloat(get(row, "product_cost"))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", line, err)
+		}
+		disc, err := parseFloat(get(row, "discount_amount"))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", line, err)
+		}
+		tax, err := parseFloat(get(row, "tax_amount"))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", line, err)
+		}
+		createdStr := get(row, "created_timestamp")
+		created := time.Now()
+		if createdStr != "" {
+			if t, err := time.Parse(time.RFC3339, createdStr); err == nil {
+				created = t
+			}
+		}
+
+		out = append(out, OrderRow{
+			DateValue:        dateVal,
+			CustomerName:     get(row, "customer_name"),
+			CustomerEmail:    get(row, "customer_email"),
+			CustomerPhone:    get(row, "customer_phone"),
+			CustomerAddress:  get(row, "customer_address"),
+			CustomerCity:     get(row, "customer_city"),
+			CustomerState:    get(row, "customer_state"),
+			CustomerCountry:  get(row, "customer_country"),
+			ProductName:      get(row, "product_name"),
+			ProductCategory:  get(row, "product_category"),
+			ProductDesc:      get(row, "product_description"),
+			ProductPrice:     pPrice,
+			ProductCost:      pCost,
+			ProductMaker:     get(row, "product_manufacturer"),
+			LocationName:     get(row, "location_name"),
+			LocationAddress:  get(row, "location_address"),
+			LocationCity:     get(row, "location_city"),
+			LocationState:    get(row, "location_state"),
+			LocationCountry:  get(row, "location_country"),
+			LocationZip:      get(row, "location_zipcode"),
+			Quantity:         qty,
+			UnitPrice:        uPrice,
+			DiscountAmount:   disc,
+			TaxAmount:        tax,
+			CreatedTimestamp: created,
+		})
+	}
+
+	return out, nil
 }
 
 // Transform standardizes and normalizes data
@@ -859,9 +1041,7 @@ func (e *ETLService) CreateStarSchemaViews(tableName string) error {
 
 	// Create a view based on identified dimensions and facts
 	viewName := fmt.Sprintf("%s_star_view", tableName)
-	
-	// Build SELECT query with all columns
-	var selectColumns []string
+
 	query := fmt.Sprintf(`SELECT * FROM %s`, tableName)
 	
 	// Create the view
@@ -1005,6 +1185,159 @@ func (e *ETLService) ExtractFromSQL(query string) ([]DataRecord, error) {
 	return data, nil
 }
 
+// getOrCreateDateID ensures a dim_date row exists and returns its id.
+func (e *ETLService) getOrCreateDateID(ctx context.Context, dateVal time.Time) (int, error) {
+	var id int
+	err := e.db.QueryRowContext(ctx, `SELECT date_id FROM dim_date WHERE date_value = $1`, dateVal).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	// compute attributes
+	weekday := int(dateVal.Weekday())
+	isWeekend := weekday == 0 || weekday == 6
+	monthNum := int(dateVal.Month())
+	yearNum := dateVal.Year()
+	quarter := (monthNum-1)/3 + 1
+	_, err = e.db.ExecContext(ctx, `
+		INSERT INTO dim_date (date_value, day_of_week, day_name, month_number, month_name, year_number, quarter_number, is_weekend, is_holiday)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,FALSE)
+	`, dateVal, weekday, dateVal.Weekday().String(), monthNum, dateVal.Month().String(), yearNum, quarter, isWeekend)
+	if err != nil {
+		return 0, err
+	}
+	err = e.db.QueryRowContext(ctx, `SELECT date_id FROM dim_date WHERE date_value = $1`, dateVal).Scan(&id)
+	return id, err
+}
+
+// getOrCreateCustomerID ensures a dim_customer row exists and returns its id.
+func (e *ETLService) getOrCreateCustomerID(ctx context.Context, r OrderRow) (int, error) {
+	var id int
+	err := e.db.QueryRowContext(ctx, `
+		SELECT customer_id FROM dim_customer
+		WHERE customer_name=$1 AND COALESCE(customer_email,'')=$2
+		LIMIT 1
+	`, r.CustomerName, r.CustomerEmail).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	_, err = e.db.ExecContext(ctx, `
+		INSERT INTO dim_customer (customer_name, customer_email, customer_phone, customer_address, customer_city, customer_state, customer_country, created_date)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+	`, r.CustomerName, r.CustomerEmail, r.CustomerPhone, r.CustomerAddress, r.CustomerCity, r.CustomerState, r.CustomerCountry, r.DateValue)
+	if err != nil {
+		return 0, err
+	}
+	err = e.db.QueryRowContext(ctx, `
+		SELECT customer_id FROM dim_customer
+		WHERE customer_name=$1 AND COALESCE(customer_email,'')=$2
+		ORDER BY customer_id DESC
+		LIMIT 1
+	`, r.CustomerName, r.CustomerEmail).Scan(&id)
+	return id, err
+}
+
+// getOrCreateProductID ensures a dim_product row exists and returns its id.
+func (e *ETLService) getOrCreateProductID(ctx context.Context, r OrderRow) (int, error) {
+	var id int
+	err := e.db.QueryRowContext(ctx, `
+		SELECT product_id FROM dim_product
+		WHERE product_name=$1 AND COALESCE(product_category,'')=$2
+		LIMIT 1
+	`, r.ProductName, r.ProductCategory).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	_, err = e.db.ExecContext(ctx, `
+		INSERT INTO dim_product (product_name, product_category, product_description, product_price, product_cost, product_manufacturer, created_date)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+	`, r.ProductName, r.ProductCategory, r.ProductDesc, r.ProductPrice, r.ProductCost, r.ProductMaker, r.DateValue)
+	if err != nil {
+		return 0, err
+	}
+	err = e.db.QueryRowContext(ctx, `
+		SELECT product_id FROM dim_product
+		WHERE product_name=$1 AND COALESCE(product_category,'')=$2
+		ORDER BY product_id DESC
+		LIMIT 1
+	`, r.ProductName, r.ProductCategory).Scan(&id)
+	return id, err
+}
+
+// getOrCreateLocationID ensures a dim_location row exists and returns its id.
+func (e *ETLService) getOrCreateLocationID(ctx context.Context, r OrderRow) (int, error) {
+	var id int
+	err := e.db.QueryRowContext(ctx, `
+		SELECT location_id FROM dim_location
+		WHERE location_name=$1 AND COALESCE(location_city,'')=$2
+		LIMIT 1
+	`, r.LocationName, r.LocationCity).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	_, err = e.db.ExecContext(ctx, `
+		INSERT INTO dim_location (location_name, location_address, location_city, location_state, location_country, location_zipcode, created_date)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+	`, r.LocationName, r.LocationAddress, r.LocationCity, r.LocationState, r.LocationCountry, r.LocationZip, r.DateValue)
+	if err != nil {
+		return 0, err
+	}
+	err = e.db.QueryRowContext(ctx, `
+		SELECT location_id FROM dim_location
+		WHERE location_name=$1 AND COALESCE(location_city,'')=$2
+		ORDER BY location_id DESC
+		LIMIT 1
+	`, r.LocationName, r.LocationCity).Scan(&id)
+	return id, err
+}
+
+// insertFactSale inserts a fact_sales record using resolved dimension IDs.
+func (e *ETLService) insertFactSale(ctx context.Context, dateID, custID, prodID, locID int, r OrderRow) error {
+	total := r.UnitPrice * float64(r.Quantity)
+	if r.DiscountAmount != 0 {
+		total -= r.DiscountAmount
+	}
+	if r.TaxAmount != 0 {
+		total += r.TaxAmount
+	}
+	_, err := e.db.ExecContext(ctx, `
+		INSERT INTO fact_sales (date_id, customer_id, product_id, location_id, quantity, unit_price, total_amount, discount_amount, tax_amount, created_timestamp)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+	`, dateID, custID, prodID, locID, r.Quantity, r.UnitPrice, total, r.DiscountAmount, r.TaxAmount, r.CreatedTimestamp)
+	return err
+}
+
+// IngestOrdersCSV processes a structured orders CSV into the star schema.
+func (e *ETLService) IngestOrdersCSV(filePath string) error {
+	rows, err := parseOrdersCSV(filePath)
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	for i, r := range rows {
+		dateID, err := e.getOrCreateDateID(ctx, r.DateValue)
+		if err != nil {
+			return fmt.Errorf("row %d date: %w", i+1, err)
+		}
+		custID, err := e.getOrCreateCustomerID(ctx, r)
+		if err != nil {
+			return fmt.Errorf("row %d customer: %w", i+1, err)
+		}
+		prodID, err := e.getOrCreateProductID(ctx, r)
+		if err != nil {
+			return fmt.Errorf("row %d product: %w", i+1, err)
+		}
+		locID, err := e.getOrCreateLocationID(ctx, r)
+		if err != nil {
+			return fmt.Errorf("row %d location: %w", i+1, err)
+		}
+		if err := e.insertFactSale(ctx, dateID, custID, prodID, locID, r); err != nil {
+			return fmt.Errorf("row %d fact insert: %w", i+1, err)
+		}
+	}
+	log.Printf("CSV ingested: %d filas a esquema estrella", len(rows))
+	return nil
+}
+
 // ProcessETLFromSQL processes ETL from a SQL source
 func (e *ETLService) ProcessETLFromSQL(query string) error {
 	// Extract
@@ -1053,6 +1386,12 @@ func main() {
 	
 	if sourceType == "file" {
 		filePath := os.Getenv("ETL_SOURCE_FILE")
+		if os.Getenv("ETL_MODE") == "star" || os.Getenv("ETL_COMMAND") == "ingest-orders-csv" {
+			if err := etl.IngestOrdersCSV(filePath); err != nil {
+				log.Fatalf("ETL star ingestion failed: %v", err)
+			}
+			return
+		}
 		if err := etl.ProcessETLFromFile(filePath); err != nil {
 			log.Fatalf("ETL process failed: %v", err)
 		}
@@ -1094,6 +1433,17 @@ func main() {
 			
 			if err := etl.ProcessETLFromFile(filePath); err != nil {
 				log.Fatalf("ETL process failed: %v", err)
+			}
+		} else if command == "ingest-orders-csv" {
+			filePath := os.Getenv("FILE_PATH")
+			if filePath == "" {
+				filePath = os.Getenv("ETL_SOURCE_FILE")
+			}
+			if filePath == "" {
+				log.Fatal("FILE_PATH or ETL_SOURCE_FILE must be set for ingest-orders-csv")
+			}
+			if err := etl.IngestOrdersCSV(filePath); err != nil {
+				log.Fatalf("ETL star ingestion failed: %v", err)
 			}
 		} else {
 			log.Fatal("ETL_SOURCE_TYPE must be either 'file' or 'sql', or ETL_COMMAND must be set")

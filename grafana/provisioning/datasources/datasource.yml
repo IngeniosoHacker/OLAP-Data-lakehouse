@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: Postgres Orders
+    uid: postgres-orders
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: datalakehouse
+    user: client_reader
+    secureJsonData:
+      password: reader_pass123
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    isDefault: true

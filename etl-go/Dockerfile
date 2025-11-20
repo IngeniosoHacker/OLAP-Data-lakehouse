@@ -4,6 +4,12 @@ FROM golang:1.21-alpine AS builder
 # Set the working directory
 WORKDIR /app
 
+# Install git for downloading Go modules hosted in git repositories
+RUN apk add --no-cache git
+
+# Prefer the public Go proxy to avoid interactive git prompts in builds
+ENV GOPROXY=https://proxy.golang.org,direct
+
 # Copy go mod files
 COPY go.mod go.sum ./
 
@@ -12,6 +18,9 @@ RUN go mod download
 
 # Copy the source code
 COPY . .
+
+# Ensure module metadata is complete for all imports
+RUN go mod tidy
 
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o etl-go .

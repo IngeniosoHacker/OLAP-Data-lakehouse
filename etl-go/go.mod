@@ -3,18 +3,15 @@ module etl-go
 go 1.21
 
 require (
-	github.com/extrame/gofile v0.0.0-20150626122553-1c0f056ba922
-	github.com/go-mail/mail v0.0.0-20180327181744-9dd380c1a705
 	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v7 v7.0.63
-	github.com/tealeg/xlsx v1.1.1
+	github.com/tealeg/xlsx v1.0.5
+	github.com/extrame/xls v0.0.1
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/extrame/ole2 v0.0.0-20150623133637-5085e02e6828 // indirect
-	github.com/extrame/xls v0.0.0-20190211025632-579b8b29b5a3 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
